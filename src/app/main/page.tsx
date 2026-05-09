@@ -68,27 +68,29 @@ export default function MainPage() {
     setSelectedIngredients((prev) => prev.filter((item) => item !== ingredient));
   };
 
-  // ─── AI 레시피 추천 검색 (/api/recommendation Next.js API Route 호출) ───
+  // ─── AI 레시피 추천 검색 (Python FastAPI 백엔드 /recommend-recipes 호출) ───
   const handleSearch = async () => {
     setIsLoading(true);
     setSelectedRecipe(null); // 검색 시 상세 뷰 닫기
     try {
-      const response = await fetch("/api/recommendation", {
+      const response = await fetch("http://127.0.0.1:8000/recommend-recipes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ingredients: selectedIngredients,
           query: searchQuery,
         }),
       });
 
-      if (!response.ok) throw new Error("추천 API 응답 오류");
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.detail ?? "추천 API 응답 오류");
+      }
 
       const data = await response.json();
       setRecipes(data.recipes ?? []);
-    } catch (error) {
+    } catch (error: any) {
       console.error("레시피 추천 요청 실패:", error);
-      alert("레시피를 가져오는 중 오류가 발생했습니다.");
+      alert(error.message ?? "레시피를 가져오는 중 오류가 발생했습니다.");
     } finally {
       setIsLoading(false);
     }

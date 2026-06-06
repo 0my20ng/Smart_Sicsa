@@ -325,7 +325,7 @@ export default function MainPage() {
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyDown={handleAddIngredient}
-                  className="flex-1 min-w-[120px] outline-none bg-transparent text-lg ml-2 placeholder:text-gray-300"
+                  className="flex-1 min-w-[120px] outline-none bg-transparent text-lg ml-2 placeholder:text-gray-300 text-black"
                 />
               </div>
 
@@ -347,7 +347,7 @@ export default function MainPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                className="block w-full pr-14 pl-6 py-5 bg-white border-2 border-gray-300 rounded-2xl placeholder-gray-400 focus:outline-none focus:ring-4 focus:ring-green-100 focus:border-green-400 text-xl transition-all shadow-sm"
+                className="block w-full pr-14 pl-6 py-5 bg-white border-2 border-gray-300 rounded-2xl placeholder-gray-400 focus:outline-none focus:ring-4 focus:ring-green-100 focus:border-green-400 text-xl transition-all shadow-sm text-black"
                 placeholder="레시피 검색하기..."
               />
               <button

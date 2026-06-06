@@ -6,12 +6,7 @@ import { Search, X, Image as ImageIcon, Loader2, ArrowLeft, Heart } from "lucide
 import { useSession } from "next-auth/react";
 import { getUserFridge, toggleBookmark, checkBookmarkExists } from "@/lib/firestore";
 
-// ─────────────────────────────────────────
-// 상수: 백엔드 베이스 URL
-// 추후 Firebase 배포 시 환경 변수로 교체:
-//   process.env.NEXT_PUBLIC_API_URL
-// ─────────────────────────────────────────
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+// 백엔드 API가 Next.js 서버리스 함수로 통합되어 로컬/외부 구분이 불필요해졌습니다.
 
 // ─────────────────────────────────────────
 // 타입 정의
@@ -148,7 +143,7 @@ export default function MainPage() {
     setSelectedRecipe(null);
 
     try {
-      const response = await fetch(`${API_BASE}/recommend-recipes`, {
+      const response = await fetch("/api/recommend-recipes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

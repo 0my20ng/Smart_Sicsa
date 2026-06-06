@@ -8,67 +8,66 @@
 
 ## ✨ 주요 기능 (Key Features)
 
+### 🔐 소셜 로그인 & 데이터 동기화
+- **NextAuth (Google Login)** 기반의 간편한 소셜 로그인
+- 사용자별 냉장고 재료 및 북마크 데이터를 **Firebase Firestore**와 실시간 동기화
+
+### 🧊 내 냉장고 (`/fridge`)
+- 보유 중인 식재료를 손쉽게 등록 및 관리
+- 로컬 스토리지 휘발성 데이터가 아닌, 사용자 계정 기반 클라우드 영구 저장
+
 ### 🌟 오늘의 레시피 (`/daily`)
 - 오늘 날짜를 기반으로 **하루 한 가지 음식**을 추천
-- 돌림판 스핀 애니메이션으로 결과 공개
-- "오늘 이 음식이 좋은 이유"를 함께 제시
+- 돌림판 스핀 애니메이션으로 결과 공개 및 추천 이유 제시
+- 마음에 드는 메뉴는 즉시 💖 북마크(찜하기) 가능
 
 ### 🍱 AI 기반 레시피 추천 (`/main`)
-- 보유한 식재료를 태그로 입력하면 **Google Gemini AI**가 실제 블로그 레시피를 검색하여 추천
-- 보유 재료 / 부족한 재료를 구분하여 표시
-- 레시피 클릭 시 상세 뷰 전환 → 원본 블로그 바로 이동 가능
+- 보유한 식재료를 바탕으로 **Google Gemini AI**가 웹을 스크래핑(RAG)하여 맞춤 레시피 5개 추천
+- 보유 재료 / 부족한 재료를 명확하게 구분하여 표시
+- 원본 블로그 바로 이동 및 💖 북마크(찜하기) 지원
 
 ### 📍 학교 주변 식당 탐색 (`/restaurant`)
-- **카카오 Maps** 기반 실시간 지도 표시
-- 현재 위치 감지 후 반경 내 음식점 마커 표시
-- 음식 종류(한식/중식/일식 등), 검색 반경(500m~5km) 필터링
-- 마커 클릭 시 상세 정보 팝업 (이름, 주소, 전화번호, 카카오맵 링크)
+- **카카오 Maps** 기반 실시간 지도 감지 및 반경 내 음식점 마커 표시
+- 음식 종류(한식/중식/일식 등) 및 검색 반경 필터링
+- 식당 정보 팝업에서 💖 북마크(찜하기) 및 카카오맵 외부 링크 연동
 
-### 📱 사용자 친화적 UI/UX
-- 현대적이고 싱그러운 그린 테마 인터페이스 (형광 초록 포인트 컬러)
-- 모든 기기에서 사용 가능한 반응형 사이드바 드로어 시스템
-- 직관적인 아이콘과 애니메이션을 통한 부드러운 사용자 경험
+### 💖 북마크 모아보기 (`/bookmarks`)
+- 내가 찜한 **레시피**와 **맛집**을 분리된 탭에서 한눈에 모아보고 관리
 
 ---
 
 ## 🏗️ 아키텍처 (Architecture)
 
-이 프로젝트는 **두 개의 서버**로 구성됩니다.
+파이썬 백엔드를 모두 걷어내고, **Next.js Full-Stack 구조**로 일원화되었습니다.
 
-```
-[브라우저]
+```text
+[브라우저 (Client)]
    │
-   ├─▶ [Next.js 프론트엔드] :3000
+   ├─▶ [Next.js App Router (Serverless API)]
    │       │
-   │       ├─▶ /api/restaurants ──▶ [카카오 로컬 REST API] (서버 프록시)
-   │       └─▶ /api/recommendation ──▶ [Google Gemini API]
+   │       ├─▶ /api/restaurants ──▶ [카카오 로컬 REST API] (CORS 방지 프록시)
+   │       └─▶ /api/recommend-recipes ──▶ [Google Gemini API + Cheerio 스크래핑] (RAG 파이프라인)
    │
-   └─▶ [Python FastAPI 백엔드] :8000
-           ├─▶ GET  /ingredients   (재료 목록 조회)
-           ├─▶ POST /ingredients   (재료 추가)
-           └─▶ POST /recommend-recipes ──▶ [Google Gemini API]
+   └─▶ [Firebase Cloud Firestore] (Database)
+           ├─▶ users (NextAuth 사용자 정보)
+           ├─▶ refrigerators (내 냉장고 재료)
+           └─▶ bookmarks (레시피 & 맛집 찜하기)
 ```
 
 ---
 
 ## 🛠 기술 스택 (Tech Stack)
 
-### **Frontend (Next.js)**
+### **Frontend & Backend (Full-Stack Next.js)**
 | 항목 | 내용 |
 |------|------|
-| Framework | Next.js 16 (App Router) |
-| Library | React 19 |
-| Styling | Tailwind CSS v4 |
-| Icons | Lucide React |
-| Font | Noto Sans KR |
-| 지도 | 카카오 Maps JS API + 로컬 REST API |
-
-### **Backend (Python)**
-| 항목 | 내용 |
-|------|------|
-| Framework | FastAPI + Uvicorn |
-| AI | `google-genai` (Gemini Flash Lite) |
-| 환경 관리 | Python venv, python-dotenv |
+| Framework | Next.js 16 (App Router, Serverless API) |
+| Language | TypeScript |
+| UI Library | React 19, Tailwind CSS v4, Lucide React |
+| Auth | NextAuth.js (v5) + Firebase Adapter |
+| Database | Firebase Cloud Firestore |
+| AI Pipeline | `@google/generative-ai` (Gemini 2.5 Flash), `cheerio` (Web Scraping) |
+| Map | 카카오 Maps JS API + 카카오 로컬 REST API |
 
 ---
 
@@ -82,68 +81,67 @@ cd smart-sicsa
 
 ### **2. 환경 변수 설정**
 
-프로젝트 루트에 `.env.local`을, `Backend` 폴더 안에 `.env` 파일을 생성하세요.
-> 자세한 내용은 [`API_GUIDE.md`](./API_GUIDE.md) 참고
+프로젝트 루트에 `.env.local` 파일을 생성하고 아래 변수들을 입력하세요.
 
 ```bash
-# .env.local
+# [NextAuth & Authentication]
+AUTH_SECRET=YOUR_AUTH_SECRET
+AUTH_GOOGLE_ID=YOUR_GOOGLE_CLIENT_ID
+AUTH_GOOGLE_SECRET=YOUR_GOOGLE_CLIENT_SECRET
+
+# [Google Gemini AI]
 GOOGLE_API_KEY=YOUR_GEMINI_API_KEY
-GOOGLE_SEARCH_API_KEY=YOUR_SEARCH_API_KEY
-GOOGLE_SEARCH_CX=YOUR_SEARCH_CX_ID
+
+# [Kakao Maps & Local API]
 NEXT_PUBLIC_KAKAO_MAP_API_KEY=YOUR_KAKAO_JS_KEY
 KAKAO_REST_API_KEY=YOUR_KAKAO_REST_KEY
+
+# [Firebase SDK]
+NEXT_PUBLIC_FIREBASE_API_KEY=YOUR_FIREBASE_API_KEY
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=YOUR_FIREBASE_AUTH_DOMAIN
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=YOUR_FIREBASE_PROJECT_ID
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=YOUR_FIREBASE_STORAGE_BUCKET
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=YOUR_FIREBASE_MESSAGING_SENDER_ID
+NEXT_PUBLIC_FIREBASE_APP_ID=YOUR_FIREBASE_APP_ID
+
+# [Firebase Admin SDK]
+FIREBASE_PROJECT_ID=YOUR_FIREBASE_PROJECT_ID
+FIREBASE_CLIENT_EMAIL=YOUR_FIREBASE_CLIENT_EMAIL
+FIREBASE_PRIVATE_KEY="YOUR_FIREBASE_PRIVATE_KEY"
 ```
 
-### **3. Next.js 프론트엔드 실행**
+### **3. 의존성 설치 및 실행**
 ```bash
 npm install
 npm run dev
 ```
 브라우저에서 [http://localhost:3000](http://localhost:3000)을 열어 확인하세요.
 
-### **4. Python 백엔드 실행 (별도 터미널)**
-```bash
-# 가상환경 생성 및 활성화 (최초 1회)
-python -m venv venv
-.\venv\Scripts\activate
-
-# 의존성 설치 (최초 1회)
-pip install fastapi uvicorn google-genai python-dotenv pydantic
-
-# 서버 실행
-python -m uvicorn Backend.create_food:app --reload
-```
-백엔드 서버가 [http://127.0.0.1:8000](http://127.0.0.1:8000)에서 실행됩니다.
-
 ---
 
-## 📂 프로젝트 구조 (Folder Structure)
+## 📂 프로젝트 핵심 구조 (Folder Structure)
 
 ```text
 Smart_sicsa/
-├── Backend/
-│   ├── .env                      # 백엔드 환경 변수 (API 키)
-│   └── create_food.py            # FastAPI 백엔드 (재료 관리 + Gemini 추천)
 ├── src/
-│   └── app/
-│       ├── api/
-│       │   ├── recommendation/
-│       │   │   └── route.ts      # Gemini 레시피 추천 API (프록시)
-│       │   └── restaurants/
-│       │       └── route.ts      # 카카오 로컬 API 프록시 (REST 키 보호)
-│       ├── daily/
-│       │   └── page.tsx          # 오늘의 레시피 페이지
-│       ├── main/
-│       │   └── page.tsx          # 레시피 추천 메인 페이지
-│       ├── restaurant/
-│       │   └── page.tsx          # 식당 추천 페이지 (카카오 Maps)
-│       ├── layout.tsx            # 공통 레이아웃 (SDK 로드)
-│       └── page.tsx              # 로그인 페이지 (Entry)
-├── src/components/
-│   └── Sidebar.tsx               # 공통 사이드바 컴포넌트
-├── API_GUIDE.md                  # API 키 발급 및 환경 변수 설정 가이드
-├── PROJECT_ROADMAP.md            # 개발 진행 상황 및 향후 계획
-└── .env.local                    # 환경 변수 (Git 미포함)
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── recommend-recipes/  # RAG 기반 AI 추천 서버리스 파이프라인
+│   │   │   └── restaurants/        # 카카오 로컬 API 프록시 라우트
+│   │   ├── bookmarks/              # 북마크 모아보기 (레시피/맛집)
+│   │   ├── daily/                  # 오늘의 레시피 페이지
+│   │   ├── fridge/                 # 내 냉장고 관리 페이지
+│   │   ├── main/                   # 메인 AI 레시피 추천 페이지
+│   │   ├── restaurant/             # 학교 주변 맛집 탐색 페이지
+│   │   ├── layout.tsx              # 전역 레이아웃 및 NextAuth Session Provider
+│   │   └── page.tsx                # 소셜 로그인 진입 화면
+│   ├── components/                 # 공통 UI (Sidebar 등)
+│   ├── lib/
+│   │   ├── firebase.ts             # Firebase Client SDK 및 사용자 설정
+│   │   ├── firebase-admin.ts       # Firebase Admin SDK (NextAuth용)
+│   │   └── firestore.ts            # 냉장고 & 북마크 비즈니스 로직 API
+│   └── auth.ts                     # NextAuth 설정 및 콜백
+└── .env.local                      # 환경 변수 설정
 ```
 
 ---

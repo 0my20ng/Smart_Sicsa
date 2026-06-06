@@ -40,6 +40,13 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-#Backend
+# Backend (Python)
 .vs/
 venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Temporary / Test files
+test_gemini.py

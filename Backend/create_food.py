@@ -20,7 +20,6 @@ from google.genai import types
 
 # 프롬프트 및 데이터베이스 모듈 임포트
 from .prompts import build_recipe_analysis_prompt
-from .database import DatabaseHelper
 
 import requests
 from bs4 import BeautifulSoup
@@ -36,8 +35,7 @@ logger = logging.getLogger(__name__)
 env_path = Path(__file__).parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
-# 데이터베이스 헬퍼 초기화 (추후 Firebase 이식 가능)
-db = DatabaseHelper()
+# 무상태(Stateless) 백엔드: DB를 사용하지 않고 요청 바디의 데이터를 사용합니다.
 
 # ─────────────────────────────────────────
 # Pydantic 모델 정의
@@ -117,52 +115,19 @@ except Exception as e:
 @app.get("/health", tags=["system"], response_model=HealthResponse)
 def health_check():
     """서버 상태 모니터링용"""
-    current_ingredients = db.load_ingredients()
     return HealthResponse(
         status="ok",
         version="1.0.0",
-        ingredients_count=len(current_ingredients),
+        ingredients_count=0, # Stateless이므로 항상 0 반환
     )
 
-@app.get("/ingredients", tags=["ingredients"], response_model=IngredientListResponse)
-def get_ingredients():
-    """저장된 재료 목록 조회"""
-    current_ingredients = db.load_ingredients()
-    return IngredientListResponse(ingredients=current_ingredients, count=len(current_ingredients))
-
-@app.post("/ingredients", tags=["ingredients"], response_model=IngredientMutateResponse, status_code=status.HTTP_201_CREATED)
-def add_ingredient(ingredient: IngredientRequest):
-    """새로운 재료 추가"""
-    name = ingredient.name.strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="재료 이름이 비어 있습니다.")
-    
-    current_ingredients = db.load_ingredients()
-    if name in current_ingredients:
-        raise HTTPException(status_code=409, detail=f"'{name}'은 이미 존재하는 재료입니다.")
-    
-    current_ingredients.append(name)
-    db.save_ingredients(current_ingredients)
-    
-    return IngredientMutateResponse(message=f"'{name}' 추가 완료", ingredients=current_ingredients)
-
-@app.delete("/ingredients/{name}", tags=["ingredients"], response_model=IngredientMutateResponse)
-def delete_ingredient(name: str = FPath(..., description="삭제할 재료 이름")):
-    """재료 삭제"""
-    current_ingredients = db.load_ingredients()
-    if name not in current_ingredients:
-        raise HTTPException(status_code=404, detail=f"'{name}' 재료를 찾을 수 없습니다.")
-    
-    current_ingredients.remove(name)
-    db.save_ingredients(current_ingredients)
-    
-    return IngredientMutateResponse(message=f"'{name}' 삭제 완료", ingredients=current_ingredients)
+# 프론트엔드가 Firestore를 직접 관리하므로 기존 /ingredients CRUD API는 제거되었습니다.
 
 @app.post("/recommend-recipes", tags=["recipes"], response_model=RecipeListResponse)
 def recommend_recipes(body: RecommendRequest):
     """실시간 구글 검색 API 및 스크래핑 기반 RAG 레시피 추천"""
-    # 재료 우선순위: 요청 바디 > 로컬 DB
-    effective_ingredients = body.ingredients if body.ingredients else db.load_ingredients()
+    # 프론트엔드가 요청 바디로 전송한 재료만 사용 (Stateless)
+    effective_ingredients = body.ingredients
 
     if not effective_ingredients:
         raise HTTPException(

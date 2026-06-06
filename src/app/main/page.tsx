@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
-import { Search, X, Image as ImageIcon, Loader2, ArrowLeft } from "lucide-react";
+import { Search, X, Image as ImageIcon, Loader2, ArrowLeft, Heart } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { getUserFridge, toggleBookmark, checkBookmarkExists } from "@/lib/firestore";
 
 // ─────────────────────────────────────────
 // 상수: 백엔드 베이스 URL
@@ -49,24 +51,67 @@ export default function MainPage() {
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isRateLimited, setIsRateLimited] = useState(false);
+  const { data: session } = useSession();
+  const [isFridgeLoading, setIsFridgeLoading] = useState(false);
+  
+  const [isBookmarked, setIsBookmarked] = useState(false);
+  const [isBookmarkLoading, setIsBookmarkLoading] = useState(false);
+
+  // 선택된 레시피 변경 시 북마크 여부 확인
+  useEffect(() => {
+    if (selectedRecipe && session?.user?.id) {
+      checkBookmarkExists(session.user.id, selectedRecipe.title).then((id) => {
+        setIsBookmarked(!!id);
+      });
+    } else {
+      setIsBookmarked(false);
+    }
+  }, [selectedRecipe, session]);
+
+  const handleBookmarkToggle = async () => {
+    if (!session?.user?.id || !selectedRecipe) return;
+    try {
+      setIsBookmarkLoading(true);
+      const newStatus = await toggleBookmark({
+        userId: session.user.id,
+        type: "RECIPE",
+        title: selectedRecipe.title,
+        link: selectedRecipe.link,
+        imageUrl: selectedRecipe.imageUrl || "",
+        description: selectedRecipe.description,
+      });
+      setIsBookmarked(newStatus);
+    } catch (error) {
+      console.error("북마크 실패:", error);
+    } finally {
+      setIsBookmarkLoading(false);
+    }
+  };
 
   // ─────────────────────────────────────────
-  // 앱 시작 시 서버에서 저장된 재료 불러오기
+  // 백엔드가 Stateless로 전환되었으므로 초기 재료 목록은 비어있습니다.
+  // 추후 로그인 완료 시 Firebase Firestore에서 '내 냉장고' 데이터를 불러오도록 연동합니다.
   // ─────────────────────────────────────────
   useEffect(() => {
-    fetch(`${API_BASE}/ingredients`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then((data: { ingredients: string[]; count: number }) => {
-        setSelectedIngredients(data.ingredients ?? []);
-      })
-      .catch((err) => {
-        // 백엔드가 꺼져 있어도 앱이 동작하도록 경고만 출력
-        console.warn("백엔드 재료 불러오기 실패 (서버가 실행 중이 아닐 수 있음):", err.message);
-      });
+    // 임시 로컬 저장소 등에서 불러올 수 있음
   }, []);
+
+  // ─────────────────────────────────────────
+  // 내 냉장고 불러오기
+  // ─────────────────────────────────────────
+  const handleLoadFridge = async () => {
+    if (!session?.user?.id) return;
+    try {
+      setIsFridgeLoading(true);
+      const fridgeIngredients = await getUserFridge(session.user.id);
+      // 기존 재료에 냉장고 재료를 병합 (중복 제거)
+      setSelectedIngredients((prev) => Array.from(new Set([...prev, ...fridgeIngredients])));
+    } catch (error) {
+      console.error("냉장고 불러오기 실패:", error);
+    } finally {
+      setIsFridgeLoading(false);
+    }
+  };
 
   // ─────────────────────────────────────────
   // 재료 추가 (Enter 키)
@@ -81,32 +126,8 @@ export default function MainPage() {
       return;
     }
 
-    try {
-      const response = await fetch(`${API_BASE}/ingredients`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: trimmed }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        // 409: 이미 존재 (서버-클라이언트 불일치 시 동기화)
-        if (response.status === 409) {
-          console.warn(`'${trimmed}'는 서버에 이미 존재합니다.`);
-          setSelectedIngredients(data.ingredients ?? [...selectedIngredients, trimmed]);
-        } else {
-          console.error("재료 추가 실패:", data.detail);
-        }
-      } else {
-        // 성공: 서버 응답으로 전체 목록 동기화
-        setSelectedIngredients(data.ingredients ?? []);
-      }
-    } catch {
-      // 백엔드 연결 실패 시 로컬 상태에만 추가
-      setSelectedIngredients((prev) => [...prev, trimmed]);
-    }
-
+    // 프론트엔드 로컬 상태 업데이트 (추후 Firestore 저장 로직 추가)
+    setSelectedIngredients((prev) => [...prev, trimmed]);
     setInputValue("");
   };
 
@@ -114,23 +135,8 @@ export default function MainPage() {
   // 재료 삭제 (X 버튼)
   // ─────────────────────────────────────────
   const removeIngredient = async (ingredient: string) => {
-    // 낙관적 업데이트: UI를 먼저 즉시 반영
+    // 프론트엔드 로컬 상태 업데이트 (추후 Firestore 삭제 로직 추가)
     setSelectedIngredients((prev) => prev.filter((item) => item !== ingredient));
-
-    try {
-      const response = await fetch(
-        `${API_BASE}/ingredients/${encodeURIComponent(ingredient)}`,
-        { method: "DELETE" }
-      );
-
-      if (!response.ok) {
-        const data = await response.json();
-        console.error("재료 삭제 서버 오류:", data.detail);
-        // 서버 실패 시에도 로컬 상태는 이미 삭제된 상태 유지 (UX 우선)
-      }
-    } catch {
-      console.warn("백엔드 재료 삭제 실패 (서버 연결 없음) - 로컬에서만 삭제됨");
-    }
   };
 
   // ─────────────────────────────────────────
@@ -216,8 +222,28 @@ export default function MainPage() {
               <ArrowLeft className="w-5 h-5 mr-2" /> 목록으로 돌아가기
             </button>
 
-            <div className="bg-white border-2 border-gray-100 rounded-3xl p-8 shadow-sm">
-              <h2 className="text-4xl font-black text-gray-800 mb-8">{selectedRecipe.title}</h2>
+            <div className="bg-white border-2 border-gray-100 rounded-3xl p-8 shadow-sm relative">
+              <div className="flex justify-between items-start mb-8 gap-4">
+                <h2 className="text-4xl font-black text-gray-800">{selectedRecipe.title}</h2>
+                {session?.user && (
+                  <button
+                    onClick={handleBookmarkToggle}
+                    disabled={isBookmarkLoading}
+                    className={`p-3 rounded-2xl transition-all border-2 ${
+                      isBookmarked
+                        ? "bg-red-50 border-red-200 text-red-500 hover:bg-red-100"
+                        : "bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-red-400"
+                    }`}
+                    title={isBookmarked ? "북마크 취소" : "북마크 저장"}
+                  >
+                    {isBookmarkLoading ? (
+                      <Loader2 className="w-8 h-8 animate-spin" />
+                    ) : (
+                      <Heart className="w-8 h-8" fill={isBookmarked ? "currentColor" : "none"} />
+                    )}
+                  </button>
+                )}
+              </div>
 
               {/* 대표 이미지 */}
               {selectedRecipe.imageUrl ? (
@@ -329,14 +355,25 @@ export default function MainPage() {
                 />
               </div>
 
-              {/* 냉장고 불러오기 - 추후 Firebase 연동 시 실제 기능 구현 예정 */}
+              {/* 냉장고 불러오기 버튼 */}
               <button
-                className="bg-gray-100 hover:bg-gray-200 text-gray-400 font-black py-4 px-8 rounded-2xl border-2 border-gray-200 shadow-sm transition-all flex flex-col items-center justify-center min-w-[160px] h-[4.5rem] cursor-not-allowed"
-                title="로그인 후 사용 가능합니다 (추후 지원 예정)"
-                disabled
+                onClick={handleLoadFridge}
+                disabled={!session?.user || isFridgeLoading}
+                className={`${
+                  !session?.user
+                    ? "bg-gray-100 hover:bg-gray-200 text-gray-400 border-gray-200 cursor-not-allowed"
+                    : "bg-white hover:bg-green-50 text-green-600 border-green-200 hover:border-green-300"
+                } font-black py-4 px-8 rounded-2xl border-2 shadow-sm transition-all flex flex-col items-center justify-center min-w-[160px] h-[4.5rem]`}
+                title={!session?.user ? "로그인 후 사용 가능합니다" : "내 냉장고 데이터 불러오기"}
               >
-                <span>냉장고</span>
-                <span>불러오기</span>
+                {isFridgeLoading ? (
+                  <Loader2 className="w-6 h-6 animate-spin text-green-500" />
+                ) : (
+                  <>
+                    <span>냉장고</span>
+                    <span>불러오기</span>
+                  </>
+                )}
               </button>
             </div>
 

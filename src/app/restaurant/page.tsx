@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
-import { MapPin, AlertCircle, Search, UtensilsCrossed } from "lucide-react";
+import { MapPin, AlertCircle, Search, UtensilsCrossed, Heart } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { toggleBookmark, getUserBookmarks, BookmarkData } from "@/lib/firestore";
 
 // ══════════════════════════════════════════════════════════════════════════════
 // [TypeScript 전역 타입 선언]
@@ -86,6 +88,50 @@ export default function RestaurantPage() {
   const [selectedPrice, setSelectedPrice] = useState<string>("전체");
   const [searchRadius, setSearchRadius] = useState<number>(1000); // 반경(m)
   const [restaurantList, setRestaurantList] = useState<Restaurant[]>([]); // 음식점 목록
+  
+  const { data: session } = useSession();
+  const [bookmarks, setBookmarks] = useState<BookmarkData[]>([]);
+
+  // ── 로그인 시 북마크 목록 불러오기 ──────────────────────────────────────────
+  useEffect(() => {
+    if (session?.user?.id) {
+      getUserBookmarks(session.user.id, "RESTAURANT").then(setBookmarks);
+    }
+  }, [session]);
+
+  const handleBookmarkToggle = async (place: Restaurant, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const userId = session?.user?.id;
+    if (!userId) return;
+    try {
+      const isBookmarked = bookmarks.some(b => b.title === place.place_name);
+      
+      // Optimistic update
+      if (isBookmarked) {
+        setBookmarks(prev => prev.filter(b => b.title !== place.place_name));
+      } else {
+        setBookmarks(prev => [...prev, {
+          userId,
+          type: "RESTAURANT",
+          title: place.place_name,
+          link: place.place_url,
+          description: place.category_name,
+        } as BookmarkData]);
+      }
+
+      await toggleBookmark({
+        userId,
+        type: "RESTAURANT",
+        title: place.place_name,
+        link: place.place_url,
+        description: place.category_name,
+      });
+    } catch (error) {
+      console.error("북마크 실패:", error);
+      // 에러 발생 시 원래 상태 복구
+      getUserBookmarks(userId, "RESTAURANT").then(setBookmarks);
+    }
+  };
 
   // ── 환경변수 ──────────────────────────────────────────────────────────────
   const kakaoApiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY || "";
@@ -608,7 +654,7 @@ export default function RestaurantPage() {
                 {restaurantList.map((place) => (
                   <div
                     key={place.id}
-                    className="bg-white rounded-xl p-3 border border-gray-200 shadow-sm hover:border-green-400 transition-all cursor-pointer"
+                    className="bg-white rounded-xl p-3 border border-gray-200 shadow-sm hover:border-green-400 transition-all cursor-pointer relative"
                     onClick={() => {
                       // 해당 음식점으로 지도 이동
                       const map = mapInstanceRef.current;
@@ -622,8 +668,20 @@ export default function RestaurantPage() {
                       }
                     }}
                   >
-                    <p className="font-bold text-gray-800 text-sm truncate">{place.place_name}</p>
-                    <p className="text-xs text-gray-400 truncate">{place.category_name}</p>
+                    <div className="flex justify-between items-start gap-2">
+                      <p className="font-bold text-gray-800 text-sm truncate flex-1">{place.place_name}</p>
+                      {session?.user && (
+                        <button
+                          onClick={(e) => handleBookmarkToggle(place, e)}
+                          className="p-1 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
+                        >
+                          <Heart 
+                            className={`w-5 h-5 ${bookmarks.some(b => b.title === place.place_name) ? "text-red-500 fill-current" : "text-gray-300"}`} 
+                          />
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-400 truncate pr-6">{place.category_name}</p>
                     <p className="text-xs text-green-600 font-semibold mt-1">
                       🚶 {Number(place.distance).toLocaleString()}m
                     </p>

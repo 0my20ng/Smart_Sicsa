@@ -2,7 +2,9 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
-import { RefreshCw, Sparkles, UtensilsCrossed, Calendar } from "lucide-react";
+import { RefreshCw, Sparkles, UtensilsCrossed, Calendar, Heart, Loader2 } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { toggleBookmark, checkBookmarkExists } from "@/lib/firestore";
 
 // ══════════════════════════════════════════════════════════════════════════════
 // [오늘의 레시피 데이터]
@@ -151,6 +153,39 @@ export default function DailyPage() {
   const [spinCount, setSpinCount] = useState(0);                // 돌림판 회전 카운트
   const todayIndex = getTodayIndex();
   const todayRecipe = RECIPE_POOL[todayIndex];
+  
+  const { data: session } = useSession();
+  const [isBookmarked, setIsBookmarked] = useState(false);
+  const [isBookmarkLoading, setIsBookmarkLoading] = useState(false);
+
+  // 최종 레시피 확정 시 북마크 여부 확인
+  useEffect(() => {
+    if (finalRecipe && session?.user?.id) {
+      checkBookmarkExists(session.user.id, finalRecipe.name).then((id) => {
+        setIsBookmarked(!!id);
+      });
+    } else {
+      setIsBookmarked(false);
+    }
+  }, [finalRecipe, session]);
+
+  const handleBookmarkToggle = async () => {
+    if (!session?.user?.id || !finalRecipe) return;
+    try {
+      setIsBookmarkLoading(true);
+      const newStatus = await toggleBookmark({
+        userId: session.user.id,
+        type: "RECIPE",
+        title: finalRecipe.name,
+        description: finalRecipe.reason,
+      });
+      setIsBookmarked(newStatus);
+    } catch (error) {
+      console.error("북마크 실패:", error);
+    } finally {
+      setIsBookmarkLoading(false);
+    }
+  };
 
   // ── 돌림판 애니메이션 시작 ─────────────────────────────────────────────────
   const handleSpin = useCallback(() => {
@@ -240,9 +275,9 @@ export default function DailyPage() {
                 {isSpinning ? currentDisplay.emoji : (isRevealed ? currentDisplay.emoji : "🍽️")}
               </div>
 
-              {/* 음식 이름 */}
+              {/* 음식 이름 및 북마크 버튼 */}
               <div
-                className={`text-4xl font-black mb-4 transition-all duration-200
+                className={`text-4xl font-black mb-4 transition-all duration-200 flex items-center justify-center gap-4
                   ${isSpinning ? "text-gray-300 blur-sm" : "text-gray-800 blur-0"}`}
               >
                 {isSpinning
@@ -250,6 +285,26 @@ export default function DailyPage() {
                   : isRevealed
                   ? currentDisplay.name
                   : "???"}
+                
+                {/* 북마크 버튼 (결과 공개 후, 로그인 상태일 때만 표시) */}
+                {isRevealed && !isSpinning && session?.user && (
+                  <button
+                    onClick={handleBookmarkToggle}
+                    disabled={isBookmarkLoading}
+                    className={`p-2 rounded-full transition-all border-2 flex-shrink-0 ${
+                      isBookmarked
+                        ? "bg-red-50 border-red-200 text-red-500 hover:bg-red-100"
+                        : "bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-red-400"
+                    }`}
+                    title={isBookmarked ? "북마크 취소" : "북마크 저장"}
+                  >
+                    {isBookmarkLoading ? (
+                      <Loader2 className="w-6 h-6 animate-spin" />
+                    ) : (
+                      <Heart className="w-6 h-6" fill={isBookmarked ? "currentColor" : "none"} />
+                    )}
+                  </button>
+                )}
               </div>
 
               {/* 스피닝 중 로딩 바 */}

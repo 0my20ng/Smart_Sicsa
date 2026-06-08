@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 import * as cheerio from "cheerio";
 import { RecommendRequest, RecipeItem, RecipeListResponse } from "./types";
-import { SEARCH_PROMPT, buildRecipeAnalysisPrompt, buildDirectRecipePrompt } from "./prompts";
+import { SEARCH_PROMPT, buildBatchRecipeAnalysisPrompt, buildDirectRecipePrompt } from "./prompts";
 
 export const maxDuration = 60; // 서버리스 환경 최대 실행 시간 허용
 
@@ -235,16 +235,16 @@ export async function POST(req: Request) {
       return NextResponse.json(directResult);
     }
 
-    // ── Step 5: 각 URL 스크래핑 + Gemini 분석 ────────────────────────────
+    // ── Step 5: 각 URL 병렬 스크래핑 + 단일 Gemini 분석 (프롬프트 병합) ──────────
     const recipes: RecipeItem[] = [];
     const recommendedMenus: string[] = [];
     let has429Error = false;
 
-    for (let i = 0; i < Math.min(5, googleSources.length); i++) {
-      const src = googleSources[i];
-      console.log(`[${i + 1}/${Math.min(5, googleSources.length)}] 스크래핑 시도: ${src.link}`);
-
-      let bodyText = "";
+    // 1. URLs 병렬 스크래핑 (Promise.all)
+    const urlsToScrape = googleSources.slice(0, 5);
+    const scrapePromises = urlsToScrape.map(async (src, i) => {
+      console.log(`[${i + 1}/${urlsToScrape.length}] 스크래핑 시도: ${src.link}`);
+      let bodyText = "본문 추출 실패";
       let finalUrl = src.link;
       let thumbnail: string | undefined = undefined;
 
@@ -282,48 +282,70 @@ export async function POST(req: Request) {
             bodyText = $("body").text();
           }
 
-          bodyText = bodyText.replace(/\s+/g, " ").trim().substring(0, 2500);
+          bodyText = bodyText.replace(/\s+/g, " ").trim().substring(0, 1500); // 1500자로 제한 (프롬프트 길이 관리)
 
           const ogImage = $('meta[property="og:image"]').attr("content");
           if (ogImage) thumbnail = ogImage;
         } else {
           console.warn(`[스크래핑] HTTP ${pageRes.status} 응답: ${src.link}`);
-          bodyText = "본문 추출 실패 (HTTP 오류)";
         }
       } catch (ex) {
         console.warn(`[스크래핑] 실패 (${src.link}): ${ex}`);
-        bodyText = "본문 추출 실패";
       }
 
+      return {
+        title: src.title,
+        url: finalUrl,
+        originalLink: src.link,
+        bodyText,
+        thumbnail,
+      };
+    });
+
+    const scrapedResults = await Promise.all(scrapePromises);
+    const validSources = scrapedResults.filter(res => res.bodyText !== "본문 추출 실패" && res.bodyText.length > 50);
+
+    // 2. 단일 프롬프트로 병합하여 1번의 Gemini API만 호출
+    if (validSources.length > 0) {
       try {
-        const analysisPrompt = buildRecipeAnalysisPrompt(ingredientsStr, bodyText, src.title);
+        console.log(`[Recommend API] ${validSources.length}개 소스 병합하여 단일 분석 요청 시도`);
+        const batchPrompt = buildBatchRecipeAnalysisPrompt(ingredientsStr, validSources);
+        
         const analysisRes = await ai.models.generateContent({
           model: "gemini-2.5-flash",
-          contents: analysisPrompt,
+          contents: [{ role: "user", parts: [{ text: batchPrompt }] }],
         });
         const analysisText = analysisRes.text || "";
 
         const cleanJson = analysisText.replace(/```json/g, "").replace(/```/g, "").trim();
-        const startIdx = cleanJson.indexOf("{");
-        const endIdx = cleanJson.lastIndexOf("}") + 1;
+        const startIdx = cleanJson.indexOf("[");
+        const endIdx = cleanJson.lastIndexOf("]") + 1;
 
-        const parsedData = JSON.parse(cleanJson.substring(startIdx, endIdx));
+        if (startIdx !== -1 && endIdx > startIdx) {
+          const parsedArr = JSON.parse(cleanJson.substring(startIdx, endIdx));
 
-        const recipeTitle = parsedData.title || src.title;
-        const description = parsedData.description || "조리 과정 요약이 없습니다.";
+          for (const item of parsedArr) {
+            // originalUrl을 통해 썸네일 매칭
+            const matchingSource = validSources.find(s => 
+              s.url === item.originalUrl || s.originalLink === item.originalUrl
+            );
 
-        recommendedMenus.push(recipeTitle);
-        recipes.push({
-          title: recipeTitle,
-          ingredients: effectiveIngredients,
-          missingIngredients: parsedData.actualMissingIngredients || [],
-          description,
-          link: finalUrl,
-          imageUrl: thumbnail,
-        });
-      } catch (itemEx: any) {
-        console.error(`[분석] 에러 (${src.title}): ${itemEx.message}`);
-        if (itemEx.message && (itemEx.message.includes("429") || itemEx.message.includes("RESOURCE_EXHAUSTED"))) {
+            recommendedMenus.push(item.title);
+            recipes.push({
+              title: item.title,
+              ingredients: effectiveIngredients,
+              missingIngredients: item.actualMissingIngredients || [],
+              description: item.description || "조리 과정 요약이 없습니다.",
+              link: item.originalUrl || matchingSource?.url || matchingSource?.originalLink || "",
+              imageUrl: matchingSource?.thumbnail,
+            });
+          }
+        } else {
+          console.warn("[Recommend API] 병합 분석 JSON 파싱 실패");
+        }
+      } catch (batchEx: any) {
+        console.error(`[분석] Batch 에러: ${batchEx.message}`);
+        if (batchEx.message && (batchEx.message.includes("429") || batchEx.message.includes("RESOURCE_EXHAUSTED"))) {
           has429Error = true;
         }
       }

@@ -154,21 +154,22 @@ def recommend_recipes(body: RecommendRequest):
         return RecipeListResponse(recipes=mock_items, count=1, recommendedMenus=[body.query or "김치찌개"])
 
     try:
-        # [Step 1: Gemini 내장 구글 검색 도구를 사용하여 레시피 링크 검색]
-        logger.info(f"[Recommend API] Step 1: Gemini 구글 검색 호출 | 재료: [{ingredients_str}] | 키워드: '{query_part}'")
+        # [Step 1: Gemini 구글 검색 호출 대신 5가지 메뉴 이름 추출]
+        logger.info(f"[Recommend API] Step 1: Gemini 메뉴 추천 호출 | 재료: [{ingredients_str}] | 키워드: '{query_part}'")
         
         search_prompt = f"""
 사용자 보유 식재료: [{ingredients_str}]
 추가 요청사항: [{query_part}]
 
-역할: 당신은 냉장고 파먹기 요리 전문가입니다. 사용자의 식재료와 요청사항을 고려해 추천할 만한 대표 요리 5개를 선정해 주세요.
+역할: 당신은 냉장고 파먹기 요리 전문가입니다. 사용자의 식재료와 요청사항을 고려해 추천할 만한 대표 요리 5가지를 선정해 주세요.
 태스크:
-구글 검색(google_search)을 사용하여 위의 식재료와 요청사항에 가장 어울리는 요리 5개를 찾고, 각 요리별로 구글 검색을 통해 찾은 가장 정확하고 대표적인 한국 요리 레시피 블로그 포스팅 또는 웹사이트(네이버 블로그, 만개의 레시피 등)의 제목과 실제 URL 링크를 1개씩(총 5개) 찾아서 나열해 주세요.
-주의사항: 제공된 모든 식재료를 전부 활용해야만 하는 것은 아닙니다. 보유한 식재료 중 일부만 사용해도 쉽게 완성할 수 있는 유연한 레시피 위주로 추천해 주세요.
+구글 검색(google_search)을 사용하여 위의 식재료와 요청사항에 가장 어울리는 요리 5가지를 찾고, 각 요리별로 참고할 수 있는 가장 정확하고 대표적인 한국 요리 레시피 블로그 포스팅 또는 웹사이트의 실제 URL 링크를 1개씩(총 5개) 반드시 찾아서 나열해 주세요.
+주의사항: 
+1. 제공된 모든 식재료를 전부 활용해야만 하는 것은 아닙니다.
 """
 
         response = client.models.generate_content(
-            model="gemini-2.5-flash-lite",
+            model="gemini-2.5-flash",
             contents=search_prompt,
             config=types.GenerateContentConfig(
                 tools=[{"google_search": {}}]
@@ -190,26 +191,8 @@ def recommend_recipes(body: RecommendRequest):
         except Exception as ex:
             logger.error(f"[Recommend API] Metadata 소스 추출 실패: {ex}")
 
-        # [Fallback]: Grounding 덩어리를 찾지 못한 경우 (Gemini가 본문에 직접 URL을 응답한 경우)
         if not google_sources:
-            try:
-                if hasattr(response, 'text') and response.text:
-                    import re
-                    # URL 추출 (괄호나 공백 제외)
-                    urls = re.findall(r'(https?://[^\s\)]+)', response.text)
-                    for url in urls:
-                        if url not in [s["link"] for s in google_sources]:
-                            google_sources.append({
-                                "title": "추천 레시피",
-                                "link": url
-                            })
-                    if google_sources:
-                        logger.info(f"[Recommend API] Response 텍스트에서 URL {len(google_sources)}개 직접 추출 성공")
-            except Exception as e:
-                logger.warning(f"[Recommend API] 텍스트에서 URL 추출 실패: {e}")
-
-        if not google_sources:
-            return run_mock_fallback("구글 검색 결과 소스를 가져오지 못했습니다.")
+            return run_mock_fallback("구글 검색 결과 소스를 가져오지 못했습니다. (Grounding 실패)")
 
         recipes = []
         recommended_menus = []
@@ -261,7 +244,7 @@ def recommend_recipes(body: RecommendRequest):
                 # [Step 2: AI 상세 분석 및 조리 과정 요약]
                 analysis_prompt = build_recipe_analysis_prompt(ingredients_str, body_text, title_guess)
                 analysis_res = client.models.generate_content(
-                    model="gemini-2.5-flash-lite",
+                    model="gemini-2.5-flash",
                     contents=analysis_prompt,
                 )
                 

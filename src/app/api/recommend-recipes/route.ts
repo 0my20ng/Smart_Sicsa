@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import * as cheerio from "cheerio";
 import { RecommendRequest, RecipeItem, RecipeListResponse } from "./types";
 import { SEARCH_PROMPT, buildRecipeAnalysisPrompt } from "./prompts";
@@ -7,7 +7,8 @@ import { SEARCH_PROMPT, buildRecipeAnalysisPrompt } from "./prompts";
 export const maxDuration = 60; // 서버리스 환경 최대 실행 시간 허용
 
 const API_KEY = process.env.GOOGLE_API_KEY || "";
-const genAI = new GoogleGenerativeAI(API_KEY);
+// 최신 @google/genai SDK 사용 (Python google-genai와 동일 버전)
+const ai = new GoogleGenAI({ apiKey: API_KEY });
 
 function runMockFallback(reason: string, query: string, ingredients: string[]): RecipeListResponse {
   console.warn(`Mock Fallback 실행 이유: ${reason}`);
@@ -18,7 +19,7 @@ function runMockFallback(reason: string, query: string, ingredients: string[]): 
       missingIngredients: ["돼지고기", "대파"],
       description: `검색 과정 중 오류가 발생하여 임시 예시를 노출합니다. (${reason})`,
       link: "https://www.10000recipe.com/",
-      imageUrl: "https://via.placeholder.com/150/orange/white?text=MockRecipe",
+      imageUrl: undefined,
     },
   ];
   return { recipes: mockItems, count: 1, recommendedMenus: [query || "김치찌개"] };
@@ -48,28 +49,29 @@ export async function POST(req: Request) {
 
     console.log(`[Recommend API] Step 1: Gemini 구글 검색 호출 | 재료: [${ingredientsStr}] | 키워드: '${queryPart}'`);
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash-lite",
-      tools: [{ googleSearch: {} } as any],
-    });
-
     const searchPrompt = SEARCH_PROMPT(ingredientsStr, queryPart);
 
-    const response = await model.generateContent(searchPrompt);
-    const result = response.response;
+    // 최신 SDK: google_search 도구 설정 (Python과 동일 방식)
+    const searchResponse = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [{ role: "user", parts: [{ text: searchPrompt }] }],
+      config: {
+        tools: [{ googleSearch: {} }],
+      },
+    });
 
+    // groundingMetadata에서 진짜 소스 추출 (최신 SDK 경로)
     const googleSources: { title: string; link: string }[] = [];
-
     try {
-      const candidates = result.candidates;
+      const candidates = searchResponse.candidates;
       if (candidates && candidates.length > 0) {
         const metadata = candidates[0].groundingMetadata;
         if (metadata && metadata.groundingChunks) {
           for (const chunk of metadata.groundingChunks) {
             if (chunk.web) {
               googleSources.push({
-                title: chunk.web?.title || "제목 없음",
-                link: chunk.web?.uri || "",
+                title: chunk.web.title || "제목 없음",
+                link: chunk.web.uri || "",
               });
             }
           }
@@ -80,29 +82,8 @@ export async function POST(req: Request) {
       console.error(`[Recommend API] Metadata 소스 추출 실패: ${ex}`);
     }
 
-    // Fallback URL extraction
     if (googleSources.length === 0) {
-      try {
-        const text = result.text();
-        if (text) {
-          const urlRegex = /(https?:\/\/[^\s\)]+)/g;
-          const urls = text.match(urlRegex) || [];
-          for (const url of urls) {
-            if (!googleSources.some((s) => s.link === url)) {
-              googleSources.push({ title: "추천 레시피", link: url });
-            }
-          }
-          if (googleSources.length > 0) {
-            console.log(`[Recommend API] Response 텍스트에서 URL ${googleSources.length}개 직접 추출 성공`);
-          }
-        }
-      } catch (e) {
-        console.warn(`[Recommend API] 텍스트에서 URL 추출 실패: ${e}`);
-      }
-    }
-
-    if (googleSources.length === 0) {
-      return NextResponse.json(runMockFallback("구글 검색 결과 소스를 가져오지 못했습니다.", queryPart, effectiveIngredients));
+      return NextResponse.json(runMockFallback("구글 검색 결과 소스를 가져오지 못했습니다. (Grounding 실패)", queryPart, effectiveIngredients));
     }
 
     const recipes: RecipeItem[] = [];
@@ -113,15 +94,15 @@ export async function POST(req: Request) {
     for (let i = 0; i < Math.min(5, googleSources.length); i++) {
       const src = googleSources[i];
       console.log(`[${i + 1}/5] 스크래핑 시도: ${src.link}`);
-      
+
       let bodyText = "";
       let finalUrl = src.link;
-      let thumbnail = "https://via.placeholder.com/150/green/white?text=Recipe";
+      let thumbnail: string | undefined = undefined;
 
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
-        
+
         const pageRes = await fetch(src.link, {
           headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
           signal: controller.signal,
@@ -149,9 +130,7 @@ export async function POST(req: Request) {
           bodyText = bodyText.replace(/\s+/g, " ").trim().substring(0, 2500);
 
           const ogImage = $('meta[property="og:image"]').attr("content");
-          if (ogImage) {
-            thumbnail = ogImage;
-          }
+          if (ogImage) thumbnail = ogImage;
         }
       } catch (ex) {
         console.warn(`스크래핑 실패 (${src.link}): ${ex}`);
@@ -160,18 +139,22 @@ export async function POST(req: Request) {
 
       try {
         const analysisPrompt = buildRecipeAnalysisPrompt(ingredientsStr, bodyText, src.title);
-        const analysisRes = await model.generateContent(analysisPrompt);
-        const analysisText = analysisRes.response.text();
-        
+        // 최신 SDK: 분석 단계에서도 동일한 ai.models.generateContent 사용
+        const analysisRes = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: analysisPrompt,
+        });
+        const analysisText = analysisRes.text || "";
+
         const cleanJson = analysisText.replace(/```json/g, "").replace(/```/g, "").trim();
         const startIdx = cleanJson.indexOf("{");
         const endIdx = cleanJson.lastIndexOf("}") + 1;
-        
+
         const parsedData = JSON.parse(cleanJson.substring(startIdx, endIdx));
-        
+
         const recipeTitle = parsedData.title || src.title;
         const description = parsedData.description || "조리 과정 요약이 없습니다.";
-        
+
         recommendedMenus.push(recipeTitle);
         recipes.push({
           title: recipeTitle,
@@ -205,7 +188,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ detail: "API 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요." }, { status: 429 });
     }
     if (error.message && error.message.includes("503")) {
-      // 503 서버 에러 발생 시 예외를 던지지 않고 Fallback Mock 데이터 반환
       return NextResponse.json(runMockFallback("AI 서버 일시적 과부하 (503 에러)", queryPart || "", effectiveIngredients || []));
     }
     return NextResponse.json({ detail: `추천 처리 중 알 수 없는 에러가 발생했습니다: ${error.message}` }, { status: 500 });

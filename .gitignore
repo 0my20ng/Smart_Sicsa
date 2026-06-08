@@ -50,3 +50,6 @@ __pycache__/
 
 # Temporary / Test files
 test_gemini.py
+
+# AI agent personal config files
+CLAUDE.md

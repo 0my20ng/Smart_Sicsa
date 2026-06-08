@@ -66,7 +66,7 @@
 | UI Library | React 19, Tailwind CSS v4, Lucide React |
 | Auth | NextAuth.js (v5) + Firebase Adapter |
 | Database | Firebase Cloud Firestore |
-| AI Pipeline | `@google/generative-ai` (Gemini 2.5 Flash), `cheerio` (Web Scraping) |
+| AI Pipeline | `@google/genai` (Gemini 2.5 Flash + Google Grounding), `cheerio` (Web Scraping) |
 | Map | 카카오 Maps JS API + 카카오 로컬 REST API |
 
 ---

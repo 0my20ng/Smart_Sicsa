@@ -1,4 +1,4 @@
-# 🚀 Smart Sicsa 프로젝트 로드맵 (업데이트: 2026-06-06)
+# 🚀 Smart Sicsa 프로젝트 로드맵 (업데이트: 2026-06-08)
 
 대학생 맞춤형 식사 가이드 서비스의 개발 진행 상황과 향후 계획입니다.
 
@@ -34,15 +34,22 @@
 - [x] **음식점 클릭 InfoWindow**: 이름, 카테고리, 주소, 전화번호, 카카오맵 링크 표시.
 - [x] **좌측 결과 리스트**: 검색된 음식점 목록 클릭 시 지도 해당 위치로 이동.
 
-### 🤖 AI 레시피 추천 및 백엔드 (Python FastAPI)
-- [x] **재료 관리 API**: `GET /ingredients` 및 `POST /ingredients` 구현 완료.
-- [x] **레시피 추천 API (`POST /recommend-recipes`)**: Gemini AI + `google_search` 그라운딩.
-- [x] **CORS 설정**: Next.js 프론트엔드와의 교차 출처 통신 허용.
+### 🤖 AI 레시피 추천 (Next.js Full-Stack 전환 완료)
+- [x] **레시피 추천 API (`POST /api/recommend-recipes`)**: `@google/genai` SDK + Gemini Grounding(`googleSearch`) 기반 RAG 파이프라인.
+- [x] **SDK 최신화**: `@google/generative-ai` (v0.24.1 구버전) → `@google/genai` (v2.8.0 최신 SDK)로 완전 마이그레이션.
+- [x] **환각 URL 문제 해결**: 프롬프트 전략 변경으로 Grounding 상시 트리거 보장.
+- [x] **모델 변경**: `gemini-2.5-flash-lite` → `gemini-2.5-flash` (Quota 제한 대응).
+- [x] **Python FastAPI 백엔드 (`create_food.py`)**: 동일한 Grounding 로직으로 동기화 유지 (서뺄 백엔드용).
+- [x] **CORS 설정**: Next.js 프론트엔드와의 교차 출체 통신 허용.
 
 ### ⚙️ 시스템 및 환경 설정
-- [x] **네트워크 설정**: 외부 기기(모바일 등)에서 HMR 접속 가능하도록 `allowedDevOrigins` 설정.
+- [x] **네트워크 설정**: 외부 기기(모바일 등)에서 HMR 접속 가능하도로 `allowedDevOrigins` 설정.
 - [x] **Python 가상환경**: `venv`를 이용한 독립 패키지 관리 구조 도입.
 - [x] **API 가이드 문서**: `API_GUIDE.md` 작성 (Google + 카카오 API 키 발급 방법 안내).
+- [x] **인증 시스템**: NextAuth (Google Login) + Firebase Adapter 연동.
+- [x] **냉장고 기능 (`/fridge`)**: Firestore 기반 사용자별 재료 저장 및 CRUD.
+- [x] **북마크 기능 (`/bookmarks`)**: 레시피 및 맛집 즐겨찾기 저장 및 관리.
+- [x] **Firebase Firestore DB**: users / refrigerators / bookmarks 콜렉션 설계 및 연동.
 
 ---
 
@@ -68,23 +75,24 @@
 
 > 사이드바에서 "로그인 필요" 상태로 잠금 처리됨.
 
-- [ ] **내 냉장고**: 사용자별 보유 재료 영구 저장 및 CRUD.
-- [ ] **레시피 북마크**: 찜한 레시피 저장 및 관리.
-- [ ] **식당 북마크**: 저장한 맛집 목록.
+- [x] **내 냉장고**: 사용자별 보유 재료 영구 저장 및 CRUD.
+- [x] **레시피 북마크**: 찜한 레시피 저장 및 관리.
+- [x] **식당 북마크**: 저장한 맛집 목록.
 
 ### 🔐 인증 구현 계획
-- [ ] **User API**: 회원가입 및 로그인 데이터베이스 연동.
-- [ ] **Refrigerator API**: 사용자별 냉장고 재료 영구 저장 및 CRUD (DB 연동).
-- [ ] **Bookmark API**: 찜한 레시피 및 식당 목록 저장.
+- [x] **User API**: NextAuth + Firebase Adapter 기반 회원 연동.
+- [x] **Refrigerator API**: Firestore 기반 사용자별 냉장고 재료 저장 및 CRUD 완료.
+- [x] **Bookmark API**: 있먹은 레시피 및 식당 목록 저장 완료.
 
 ---
 
 ## 🗄️ 4. 데이터베이스 (Database) 설계
 
-- [ ] **Users**: 계정 및 선호도
-- [ ] **Recipes**: 요리 정보 및 재료 매핑
-- [ ] **Restaurants**: 위치 및 메뉴 정보
-- [ ] **Bookmarks**: 즐겨찾기 연동 테이블
+- [x] **Users**: Firestore `users` 콜렉션 (NextAuth 사용자 정보)
+- [x] **Refrigerators**: Firestore `refrigerators` 콜렉션 (냉장고 재료)
+- [ ] **Recipes**: 요리 정보 및 재료 매핑 (V2 계획)
+- [ ] **Restaurants**: 위치 및 메뉴 정보 (V2 계획)
+- [x] **Bookmarks**: Firestore `bookmarks` 콜렉션 (레시피 & 맛집 즐겨찾기)
 
 ---
 

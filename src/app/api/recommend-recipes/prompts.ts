@@ -34,12 +34,12 @@ export const buildBatchRecipeAnalysisPrompt = (ingredientsStr: string, sourcesDa
 사용자 보유 식재료: [${ingredientsStr}]
 
 아래는 웹에서 스크래핑된 여러 개의 레시피 본문 데이터입니다.
-${sourcesData.map((src, i) => \`
-[레시피 \${i + 1}]
-출처 제목: \${src.title}
-원본 URL: \${src.url}
-레시피 본문 텍스트: \${src.bodyText}
----\`).join('\\n')}
+${sourcesData.map((src, i) => `
+[레시피 ${i + 1}]
+출처 제목: ${src.title}
+원본 URL: ${src.url}
+레시피 본문 텍스트: ${src.bodyText}
+---`).join('\n')}
 
 역할: 당신은 레시피를 분석하여 핵심 조리 과정을 요약하고, 사용자가 가지고 있지 않은 부족한 재료를 정확하게 가려내는 요리 비서 AI입니다.
 
@@ -65,7 +65,7 @@ ${sourcesData.map((src, i) => \`
     "description": "1. 첫번째 조리 단계 요약\\n2. 두번째 조리 단계 요약\\n3. 세번째 조리 단계 요약"
   }
 ]
-\`;
+`;
 
 // Grounding 완전 실패 시: Gemini 자체 지식으로 레시피 직접 생성
 export const buildDirectRecipePrompt = (ingredientsStr: string, queryPart: string) => `

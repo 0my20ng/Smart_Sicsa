@@ -168,13 +168,23 @@ def recommend_recipes(body: RecommendRequest):
 1. 제공된 모든 식재료를 전부 활용해야만 하는 것은 아닙니다.
 """
 
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=search_prompt,
-            config=types.GenerateContentConfig(
-                tools=[{"google_search": {}}]
-            ),
-        )
+        try:
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=search_prompt,
+                config=types.GenerateContentConfig(
+                    tools=[{"google_search": {}}]
+                ),
+            )
+        except Exception as e:
+            logger.warning(f"[Recommend API] flash 모델 Google Search 호출 실패, lite로 폴백 시도: {e}")
+            response = client.models.generate_content(
+                model="gemini-2.5-flash-lite",
+                contents=search_prompt,
+                config=types.GenerateContentConfig(
+                    tools=[{"google_search": {}}]
+                ),
+            )
 
         google_sources = []
         try:
@@ -243,10 +253,17 @@ def recommend_recipes(body: RecommendRequest):
             try:
                 # [Step 2: AI 상세 분석 및 조리 과정 요약]
                 analysis_prompt = build_recipe_analysis_prompt(ingredients_str, body_text, title_guess)
-                analysis_res = client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=analysis_prompt,
-                )
+                try:
+                    analysis_res = client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=analysis_prompt,
+                    )
+                except Exception as e:
+                    logger.warning(f"flash 모델 상세 분석 실패, lite로 폴백 시도: {e}")
+                    analysis_res = client.models.generate_content(
+                        model="gemini-2.5-flash-lite",
+                        contents=analysis_prompt,
+                    )
                 
                 analysis_text = analysis_res.text
                 clean_analysis_json = analysis_text.replace("```json", "").replace("```", "").strip()

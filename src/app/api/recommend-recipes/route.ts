@@ -125,10 +125,19 @@ async function generateDirectRecipes(
   console.log("[Recommend API] Gemini 직접 레시피 생성 폴백 실행");
   try {
     const directPrompt = buildDirectRecipePrompt(ingredientsStr, queryPart);
-    const directRes = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: [{ role: "user", parts: [{ text: directPrompt }] }],
-    });
+    let directRes;
+    try {
+      directRes = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: [{ role: "user", parts: [{ text: directPrompt }] }],
+      });
+    } catch (fallbackEx: any) {
+      console.warn(`[Recommend API] flash 모델 실패, lite로 폴백 시도: ${fallbackEx.message}`);
+      directRes = await ai.models.generateContent({
+        model: "gemini-2.5-flash-lite",
+        contents: [{ role: "user", parts: [{ text: directPrompt }] }],
+      });
+    }
 
     const rawText = directRes.text || "";
     const cleanJson = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
@@ -206,14 +215,25 @@ export async function POST(req: Request) {
 
     const searchPrompt = SEARCH_PROMPT(ingredientsStr, queryPart);
 
-    // ── Step 1: Gemini Google Search (Grounding) 호출 ─────────────────────
-    const searchResponse = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: [{ role: "user", parts: [{ text: searchPrompt }] }],
-      config: {
-        tools: [{ googleSearch: {} }],
-      },
-    });
+    let searchResponse;
+    try {
+      searchResponse = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: [{ role: "user", parts: [{ text: searchPrompt }] }],
+        config: {
+          tools: [{ googleSearch: {} }],
+        },
+      });
+    } catch (fallbackEx: any) {
+      console.warn(`[Recommend API] flash 모델 Google Search 호출 실패, lite로 폴백 시도: ${fallbackEx.message}`);
+      searchResponse = await ai.models.generateContent({
+        model: "gemini-2.5-flash-lite",
+        contents: [{ role: "user", parts: [{ text: searchPrompt }] }],
+        config: {
+          tools: [{ googleSearch: {} }],
+        },
+      });
+    }
 
     // ── Step 2: Grounding Metadata에서 소스 추출 ──────────────────────────
     let googleSources = extractGroundingSources(searchResponse);
@@ -311,10 +331,19 @@ export async function POST(req: Request) {
         console.log(`[Recommend API] ${validSources.length}개 소스 병합하여 단일 분석 요청 시도`);
         const batchPrompt = buildBatchRecipeAnalysisPrompt(ingredientsStr, validSources);
         
-        const analysisRes = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: [{ role: "user", parts: [{ text: batchPrompt }] }],
-        });
+        let analysisRes;
+        try {
+          analysisRes = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: [{ role: "user", parts: [{ text: batchPrompt }] }],
+          });
+        } catch (fallbackEx: any) {
+          console.warn(`[Recommend API] flash 모델 batch 분석 실패, lite로 폴백 시도: ${fallbackEx.message}`);
+          analysisRes = await ai.models.generateContent({
+            model: "gemini-2.5-flash-lite",
+            contents: [{ role: "user", parts: [{ text: batchPrompt }] }],
+          });
+        }
         const analysisText = analysisRes.text || "";
 
         const cleanJson = analysisText.replace(/```json/g, "").replace(/```/g, "").trim();

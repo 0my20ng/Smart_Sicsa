@@ -128,13 +128,13 @@ async function generateDirectRecipes(
     let directRes;
     try {
       directRes = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-2.5-flash-lite",
         contents: [{ role: "user", parts: [{ text: directPrompt }] }],
       });
     } catch (fallbackEx: any) {
-      console.warn(`[Recommend API] flash 모델 실패, lite로 폴백 시도: ${fallbackEx.message}`);
+      console.warn(`[Recommend API] lite 모델 실패, flash로 폴백 시도: ${fallbackEx.message}`);
       directRes = await ai.models.generateContent({
-        model: "gemini-2.5-flash-lite",
+        model: "gemini-2.5-flash",
         contents: [{ role: "user", parts: [{ text: directPrompt }] }],
       });
     }
@@ -218,16 +218,16 @@ export async function POST(req: Request) {
     let searchResponse;
     try {
       searchResponse = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-2.5-flash-lite",
         contents: [{ role: "user", parts: [{ text: searchPrompt }] }],
         config: {
           tools: [{ googleSearch: {} }],
         },
       });
     } catch (fallbackEx: any) {
-      console.warn(`[Recommend API] flash 모델 Google Search 호출 실패, lite로 폴백 시도: ${fallbackEx.message}`);
+      console.warn(`[Recommend API] lite 모델 Google Search 호출 실패, flash로 폴백 시도: ${fallbackEx.message}`);
       searchResponse = await ai.models.generateContent({
-        model: "gemini-2.5-flash-lite",
+        model: "gemini-2.5-flash",
         contents: [{ role: "user", parts: [{ text: searchPrompt }] }],
         config: {
           tools: [{ googleSearch: {} }],
@@ -334,13 +334,13 @@ export async function POST(req: Request) {
         let analysisRes;
         try {
           analysisRes = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-2.5-flash-lite",
             contents: [{ role: "user", parts: [{ text: batchPrompt }] }],
           });
         } catch (fallbackEx: any) {
-          console.warn(`[Recommend API] flash 모델 batch 분석 실패, lite로 폴백 시도: ${fallbackEx.message}`);
+          console.warn(`[Recommend API] lite 모델 batch 분석 실패, flash로 폴백 시도: ${fallbackEx.message}`);
           analysisRes = await ai.models.generateContent({
-            model: "gemini-2.5-flash-lite",
+            model: "gemini-2.5-flash",
             contents: [{ role: "user", parts: [{ text: batchPrompt }] }],
           });
         }

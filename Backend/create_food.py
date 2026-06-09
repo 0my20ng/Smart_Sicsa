@@ -170,16 +170,16 @@ def recommend_recipes(body: RecommendRequest):
 
         try:
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.5-flash-lite",
                 contents=search_prompt,
                 config=types.GenerateContentConfig(
                     tools=[{"google_search": {}}]
                 ),
             )
         except Exception as e:
-            logger.warning(f"[Recommend API] flash 모델 Google Search 호출 실패, lite로 폴백 시도: {e}")
+            logger.warning(f"[Recommend API] lite 모델 Google Search 호출 실패, flash로 폴백 시도: {e}")
             response = client.models.generate_content(
-                model="gemini-2.5-flash-lite",
+                model="gemini-2.5-flash",
                 contents=search_prompt,
                 config=types.GenerateContentConfig(
                     tools=[{"google_search": {}}]
@@ -255,13 +255,13 @@ def recommend_recipes(body: RecommendRequest):
                 analysis_prompt = build_recipe_analysis_prompt(ingredients_str, body_text, title_guess)
                 try:
                     analysis_res = client.models.generate_content(
-                        model="gemini-2.5-flash",
+                        model="gemini-2.5-flash-lite",
                         contents=analysis_prompt,
                     )
                 except Exception as e:
-                    logger.warning(f"flash 모델 상세 분석 실패, lite로 폴백 시도: {e}")
+                    logger.warning(f"lite 모델 상세 분석 실패, flash로 폴백 시도: {e}")
                     analysis_res = client.models.generate_content(
-                        model="gemini-2.5-flash-lite",
+                        model="gemini-2.5-flash",
                         contents=analysis_prompt,
                     )
                 
